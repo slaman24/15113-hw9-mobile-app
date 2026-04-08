@@ -11,11 +11,14 @@
  * component tree automatically.
  */
 
+import { Ionicons } from '@expo/vector-icons';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
+import { TouchableOpacity } from 'react-native';
 
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -27,30 +30,38 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {/*
-       * <Stack> renders screens as a push/pop navigation stack.
-       * Each <Stack.Screen> entry pre-configures a route.  Routes that aren't
-       * listed here still work — they just use default options.
-       */}
       <Stack>
         {/* The tab navigator lives at (tabs)/ and manages its own header */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
         {/*
          * The Edit screen is a stack route pushed ON TOP of the tab bar.
-         * The user navigates here by tapping a birthday card on the Home
-         * screen.  A Back button in the header takes them back to the tabs.
-         *
-         * "edit/[id]" matches the file at app/edit/[id].tsx.
-         * The [id] segment is a dynamic parameter — it becomes a URL like
-         * /edit/abc123 and the screen reads it via useLocalSearchParams().
+         * headerLeft provides an explicit back button so it works reliably
+         * across all platforms and navigation states.
          */}
         <Stack.Screen
           name="edit/[id]"
-          options={{ title: 'Edit Birthday', headerBackTitle: 'Back' }}
+          options={{
+            title: 'Edit Birthday',
+            headerStyle: { backgroundColor: colors.headerBackground },
+            headerTintColor: colors.text,
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() =>
+                  router.canGoBack() ? router.back() : router.replace('/(tabs)')
+                }
+                style={{ paddingLeft: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <Ionicons name="chevron-back" size={26} color={colors.tint} />
+              </TouchableOpacity>
+            ),
+          }}
         />
       </Stack>
       <StatusBar style="auto" />

@@ -5,25 +5,30 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
-
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    text: '#1C103C',
+    background: '#FDFAFF',
+    tint: '#7C3AED',
+    icon: '#7B6BA8',
+    tabIconDefault: '#9B8EC0',
+    tabIconSelected: '#7C3AED',
+    cardBackground: '#FFFFFF',
+    headerBackground: '#F3EDFF',
+    tabBarBackground: '#F3EDFF',
+    cardAccents: ['#FFE4EE', '#EDE4FF', '#E4F9EC', '#FFF5DD', '#E0F0FF'] as string[],
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    text: '#EDE9FF',
+    background: '#0F0B1A',
+    tint: '#A78BFA',
+    icon: '#9580C8',
+    tabIconDefault: '#6B5A90',
+    tabIconSelected: '#A78BFA',
+    cardBackground: '#1E1840',
+    headerBackground: '#1A1535',
+    tabBarBackground: '#1A1535',
+    cardAccents: ['#2D0E1A', '#1E0E40', '#082A14', '#2A1F08', '#0E1E35'] as string[],
   },
 };
 

@@ -105,20 +105,20 @@ export default function HomeScreen() {
    * how many days away it is, and optional notes.
    * Tapping the card navigates to the Edit screen for that entry.
    */
-  const renderItem = ({ item }: { item: BirthdayEntry }) => {
+  const renderItem = ({ item, index }: { item: BirthdayEntry; index: number }) => {
     const label = daysUntilLabel(item.birthday);             // e.g. "3 days away"
     const formattedDate = formatBirthdayDate(item.birthday); // e.g. "April 8"
     const isToday = daysUntilBirthday(item.birthday) === 0;
+    const accentColor = colors.cardAccents[index % colors.cardAccents.length];
 
     return (
       <TouchableOpacity
         style={[
           styles.card,
           {
-            backgroundColor: colors.background,
-            // Highlight today's birthdays with the theme tint colour as a border
-            borderColor: isToday ? colors.tint : '#E0E0E0',
-            borderWidth: isToday ? 2 : 1,
+            backgroundColor: accentColor,
+            borderColor: isToday ? colors.tint : 'transparent',
+            borderWidth: 2,
           },
         ]}
         // router.push navigates to the dynamic Edit route, passing the id

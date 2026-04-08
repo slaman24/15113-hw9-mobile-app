@@ -25,12 +25,12 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        // The active icon/label colour comes from the theme constants
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Show the navigation header above each tab screen (displays the title)
         headerShown: true,
-        // HapticTab adds a subtle haptic vibration on iOS when a tab is pressed
         tabBarButton: HapticTab,
+        tabBarStyle: { backgroundColor: Colors[colorScheme ?? 'light'].tabBarBackground },
+        headerStyle: { backgroundColor: Colors[colorScheme ?? 'light'].headerBackground },
+        headerTintColor: Colors[colorScheme ?? 'light'].text,
       }}>
       {/*
        * "index" matches the file `app/(tabs)/index.tsx`.
