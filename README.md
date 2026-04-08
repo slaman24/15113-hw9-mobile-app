@@ -12,7 +12,7 @@ The app can be run by cloning the repo, running npm install, and then npx expo s
 
 One thing I learned about mobile development that surprised me was the parallels I was able to identify between this assignment and previous ones, particularly hw6 where we got to work with databases. While this process was much more complex to implement, I could see the CRUD operations at work here. The user is able to create/read/update/delete birthdays in the app.
 
-Video Demo:
+Video Demo: https://drive.google.com/file/d/1v13kw7Nd1o6YYMnGiaX2LlHq6f3Lmla5/view?usp=sharing
 
 # Welcome to your Expo app 👋
 
