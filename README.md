@@ -1,4 +1,4 @@
-I created a Birthday Tracker app that people can use to organize their family and friends' birthdays. Through the app, people can add birthdays and see a chronological list of all of the birthdays they have saved (in order by how many days away they are). I feel that this app could be a helpful tool and it is something I would definitely love to have for myself so I will never forget a birthday.
+I created a Birthday Tracker app that people can use to organize their family and friends' birthdays. Through the app, people can add birthdays and see a chronological list of all of the birthdays they have saved (in order by how many days away they are). I feel that this app could be a helpful tool and it is something I would definitely love to have for myself so I never forget a birthday.
 
 There are 3 screens in total:
 
