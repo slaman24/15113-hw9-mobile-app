@@ -1,4 +1,18 @@
-This repo contains the code for my hw9 assignment.
+I created a Birthday Tracker app that people can use to organize their family and friends' birthdays. Through the app, people can add birthdays and see a chronological list of all of the birthdays they have saved (in order by how many days away they are).
+
+There are 3 screens in total:
+
+Home Screen - This is where the user can see the chronological list of all the birthdays they have saved in the system (each birthday is a card with the person's name, birthday, number of days away, and optional notes)
+
+Add Screen - This is where the user can add a new birthday with a form. In order to successfully add a birthday, they must enter a name and date of birth (they also have the option to enter additional notes, possibly for gift ideas or party plans)
+
+Edit Screen - This is where the user can edit an existing birthday in the system (accessed by clicking on birthday card on the Home screen vs. the main navigation bar)
+
+The app can be run by cloning the repo, running npm install, and then npx expo start.
+
+One thing I learned about mobile development that surprised me was the parallels I was able to identify between this assignment and previous ones, particularly hw6 where we got to work with databases. While this process was much more complex to implement, I could see the CRUD operations at work here. The user is able to create/read/update/delete birthdays in the app.
+
+Video Demo:
 
 # Welcome to your Expo app 👋
 
