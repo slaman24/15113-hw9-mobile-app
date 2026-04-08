@@ -13,11 +13,21 @@ type IconSymbolName = keyof typeof MAPPING;
  * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
  * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
  */
+// Each entry maps an SF Symbol name (iOS) to its Material Icons equivalent
+// (Android/web).  SF Symbols are Apple's icon library; Material Icons are
+// Google's.  We maintain this mapping manually so both platforms render a
+// semantically similar icon.
+//
+// To find Material Icon names, browse https://icons.expo.fyi.
+// To find SF Symbol names, use the SF Symbols app from Apple.
 const MAPPING = {
   'house.fill': 'home',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  // Birthday Tracker additions:
+  'gift.fill': 'card-giftcard',      // Home tab — a gift represents birthdays
+  'plus.circle.fill': 'add-circle',  // Add tab — plus in a circle
 } as IconMapping;
 
 /**

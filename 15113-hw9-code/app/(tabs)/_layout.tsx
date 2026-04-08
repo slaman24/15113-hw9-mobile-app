@@ -1,3 +1,16 @@
+/**
+ * Tab layout — defines the two primary tabs: "Birthdays" and "Add Birthday".
+ *
+ * In Expo Router, every .tsx file inside `(tabs)/` is automatically
+ * registered as a navigable screen.  The <Tabs> component here controls
+ * which of those screens actually appear as tab-bar items, and what each
+ * tab looks like (icon, label, header title).
+ *
+ * The parentheses in "(tabs)" are an Expo Router convention called a "route
+ * group" — the folder name is NOT part of the URL path.  So the Home screen
+ * is still reachable at "/" (or "/(tabs)/index") and Add at "/add".
+ */
+
 import { Tabs } from 'expo-router';
 import React from 'react';
 
@@ -12,22 +25,34 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
+        // The active icon/label colour comes from the theme constants
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
+        // Show the navigation header above each tab screen (displays the title)
+        headerShown: true,
+        // HapticTab adds a subtle haptic vibration on iOS when a tab is pressed
         tabBarButton: HapticTab,
       }}>
+      {/*
+       * "index" matches the file `app/(tabs)/index.tsx`.
+       * This is the Home screen showing all upcoming birthdays.
+       */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Birthdays',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gift.fill" color={color} />,
         }}
       />
+
+      {/*
+       * "add" matches the file `app/(tabs)/add.tsx`.
+       * This is the form for creating a new birthday entry.
+       */}
       <Tabs.Screen
-        name="explore"
+        name="add"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Add Birthday',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="plus.circle.fill" color={color} />,
         }}
       />
     </Tabs>

@@ -1,3 +1,16 @@
+/**
+ * Root layout — the outermost wrapper for every screen in the app.
+ *
+ * Expo Router uses a file-based routing system similar to Next.js.  This
+ * `_layout.tsx` at the `app/` root defines a Stack navigator that contains
+ * all top-level routes.  Think of a Stack as a pile of cards: navigating to
+ * a new screen pushes a card on top; going back pops it off.
+ *
+ * ThemeProvider (from React Navigation) makes the light/dark colour theme
+ * available to all navigation elements (headers, tab bars, etc.) deep in the
+ * component tree automatically.
+ */
+
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -6,6 +19,9 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
+  // When the app is opened via a deep link to a non-tab screen (like the
+  // edit screen), Expo Router still roots the back button to (tabs) so
+  // pressing Back always lands you on the tabs instead of a blank screen.
   anchor: '(tabs)',
 };
 
@@ -14,9 +30,28 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      {/*
+       * <Stack> renders screens as a push/pop navigation stack.
+       * Each <Stack.Screen> entry pre-configures a route.  Routes that aren't
+       * listed here still work — they just use default options.
+       */}
       <Stack>
+        {/* The tab navigator lives at (tabs)/ and manages its own header */}
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+
+        {/*
+         * The Edit screen is a stack route pushed ON TOP of the tab bar.
+         * The user navigates here by tapping a birthday card on the Home
+         * screen.  A Back button in the header takes them back to the tabs.
+         *
+         * "edit/[id]" matches the file at app/edit/[id].tsx.
+         * The [id] segment is a dynamic parameter — it becomes a URL like
+         * /edit/abc123 and the screen reads it via useLocalSearchParams().
+         */}
+        <Stack.Screen
+          name="edit/[id]"
+          options={{ title: 'Edit Birthday', headerBackTitle: 'Back' }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
