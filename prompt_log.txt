@@ -1,0 +1,35 @@
+I used GitHub Copilot (Claude Sonnet 4.6 model) for this assignment. I used an agentic development process. For this, I used three different agents (one for the spec, one for implementation, and one for review/additional features).
+
+Agent 1 (Spec):
+
+Here, I have the starter code for a basic starter app. I would like to change this and create a Birthday Tracker app that people can use to organize their family and friends' birthdays. I am imagining that the home screen would display a chronological list of upcoming birthdays. This list would be made up of of cards, each displaying the name, birthday, and a "days until" counter as well as a notes section that the user can optionally fill out (maybe this could be a place to write down some gift ideas or party plans). The app would then have an add page where the user can add a new birthday to their list. The user should also be able to click on a card on the home page to be taken to an edit page where they can make updates (maybe they entered the wrong birthday date by mistake). I would also like to use AsyncStorage for data persistence. Given this idea, could you draft me a detailed SPEC.md file containing information on error handling, required features, and acceptance criteria?
+
+
+Agent 2 (Implementation):
+
+Read SPEC.md in the project and implement the Birthday Tracker app as specified. Right now, this project contains code for a basic starter app. Please replace it with new code for the Birthday Tracker app. As you write code, please provide helpful comments explaining your implementation decsions as well as what certain code is doing. This is my first time using React Native with Expo, so I want to learn how the code is working.
+
+It looks so great! I was playing around with it a little bit and when I tried to add a birthday, I got uncaught (in romise, id:0) ReferenceError: Property 'crypto' doesn't exist. It looks like this might be occuring in add.tsx. Do you see the issue?
+
+What was the role of crypto and why was it causing an error? How are the birthdays being saved?
+
+Could you elaborate on why you chose to use ScrollView instead of FlatList for add.tsx? In which cases is ScrollView better to use and vice versa?
+
+I have used React before in other courses, and it seems to be entirely based on components. Could you explain that to me in a bit more depth and how it compares to React Native?
+
+
+Agent 3 (Review/Additional Features):
+
+Review the code in this project against the spec in SPEC.md. For each item in the acceptance criteria, check whether the code actually implements it correctly. Also check for:
+- Bugs or logic errors
+- Missing error handling
+- Code quality issues (unclear naming, repeated code, etc.)
+- Security concerns (e.g., unsafe file handling)
+Format your review as a numbered list of findings, each marked as [PASS], [FAIL], or [WARN]. Be specific -- reference file names and line numbers. Please put this review in a file called REVIEW.md
+
+I am loving the app so far! I am thinking now that maybe we could add some additional features to enhance the UI of the app. Could we incorporate some soft pastels to make the app look more fun and complete (rather than just blck and white)? Can there also be confetti on the screen when the user adds a new birthday? Also, one issue I noticed is that the back button on the edit page does not work. Why is that the case?
+
+I love the colors! I think the confetti animation might be a bit broken. It worked the first time and confetti appeared on the edit screen and then it took me to the home screen. However, when I tried adding another birthday, there is no more confetti and it doesn't take me back to the home screen (but when I go back to the home screen myself, the birthday is there). I was wondering if you could slightly change the animation so that after successfully adding a new birthday, the user should immediatly be taken to the home screen, confetti should pop onto the screen from all directions, and the message "You have someone new to celebrate" should appear in the middle of the screen"
+
+How is the message popping up on the home page after the user successfully adds a new birthday?
+

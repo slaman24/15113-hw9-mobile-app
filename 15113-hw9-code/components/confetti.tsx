@@ -264,7 +264,7 @@ export default function Confetti({ visible, onDone }: Props) {
 
       {/* Celebration message */}
       <Animated.View style={[styles.messageContainer, msgStyle]}>
-        <Text style={styles.messageText}>🎉 You have someone new{'\n'}to celebrate! 🎊</Text>
+        <Text style={styles.messageText}>🎉 You have someone new{'\n'}to celebrate! 🎉</Text>
       </Animated.View>
     </View>
   );
