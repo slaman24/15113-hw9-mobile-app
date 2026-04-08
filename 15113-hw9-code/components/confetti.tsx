@@ -1,153 +1,198 @@
 /**
- * Confetti — a lightweight celebration overlay that plays when a birthday is saved.
+ * Confetti — celebration overlay rendered on the Home screen after a birthday
+ * is saved.
  *
- * Built entirely with react-native-reanimated (already a project dependency) so
- * no extra packages are required.  Each piece is an Animated.Text node rendered
- * with a coloured Unicode shape character; the animation drives translateY,
- * translateX (sway), rotation, and opacity in parallel.
+ * Pieces burst in from all four screen edges simultaneously, cross the screen,
+ * and fade out.  A celebration message scales in at the centre.  The whole
+ * overlay auto-dismisses (~2.2 s) and then calls `onDone`.
+ *
+ * Built entirely with react-native-reanimated (already a project dependency).
+ * pointerEvents="none" ensures the overlay never blocks touches beneath it.
  *
  * Usage:
- *   <Confetti visible={showConfetti} onDone={() => doSomething()} />
+ *   <Confetti visible={showCelebration} onDone={() => setShowCelebration(false)} />
  *
- * The component renders nothing when `visible` is false.  When it becomes true
- * (the component mounts), every piece starts animating.  The very last piece
- * calls `onDone` when its fade-out completes (~1.4 s after mount).
- *
- * pointerEvents="none" ensures the overlay never blocks touches beneath it.
+ * The component renders nothing when `visible` is false, which causes a full
+ * unmount of all piece sub-components so every burst starts fresh.
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
+  withSequence,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ---------------------------------------------------------------------------
-// Piece configuration
+// Timing constants (ms)
 // ---------------------------------------------------------------------------
 
-const PIECE_COUNT = 28;
-const FALL_DURATION = 1400; // total ms from mount to last piece fading out
+const TRAVEL = 1400;    // how long each piece takes to cross the screen
+const MSG_IN = 400;     // message fade-in duration
+const MSG_HOLD = 1200;  // how long the message stays at full opacity
+const MSG_OUT = 600;    // message fade-out duration (onDone fires at the end)
 
-const COLORS = [
-  '#FF6B9D', // pink
-  '#A78BFA', // violet
-  '#34D399', // mint
-  '#FBBF24', // amber
-  '#60A5FA', // sky
-  '#FB923C', // orange
-  '#F472B6', // rose
-];
+// ---------------------------------------------------------------------------
+// Piece palette
+// ---------------------------------------------------------------------------
 
-// Simple Unicode shapes render consistently with a `color` prop on all platforms
-const CHARS = ['■', '●', '▲', '◆', '★', '♦', '▪'];
+const COLORS = ['#FF6B9D', '#A78BFA', '#34D399', '#FBBF24', '#60A5FA', '#FB923C', '#F472B6', '#E879F9'];
+const CHARS  = ['■', '●', '▲', '◆', '★', '♦', '▪'];
+
+// ---------------------------------------------------------------------------
+// Deterministic piece layout (computed once at module load)
+// ---------------------------------------------------------------------------
 
 interface PieceConfig {
   startX: number;
-  color: string;
-  char: string;
+  startY: number;
+  endX:   number;
+  endY:   number;
+  color:  string;
+  char:   string;
   fontSize: number;
-  delay: number;
-  swayX: number;
+  delay:  number;
+  rotateTo: number;
 }
 
-/**
- * Piece positions are deterministic (no Math.random at runtime) so the layout
- * is stable and predictable each time confetti shows.
- */
-const PIECES: PieceConfig[] = Array.from({ length: PIECE_COUNT }, (_, i) => ({
-  // Spread evenly across 90 % of the screen width
-  startX: SCREEN_W * (0.05 + 0.9 * (i / PIECE_COUNT)),
-  color: COLORS[i % COLORS.length],
-  char: CHARS[i % CHARS.length],
-  // Vary size modulo 4 to get a mix of small and large pieces
-  fontSize: 12 + (i % 4) * 5,
-  // Stagger start times so pieces don't all fall at once
-  delay: (i % 7) * 55,
-  // Alternate left/right horizontal sway
-  swayX: (i % 5 - 2) * 38,
-}));
+function makePieces(): PieceConfig[] {
+  const pieces: PieceConfig[] = [];
+  const N = 9; // pieces per edge  →  36 total
+
+  // Top edge → fall down across the full screen height
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    pieces.push({
+      startX: SCREEN_W * (0.05 + 0.9 * t),
+      startY: -40,
+      endX:   SCREEN_W * (0.05 + 0.9 * t) + (i % 5 - 2) * 50,
+      endY:   SCREEN_H + 40,
+      color:  COLORS[i % COLORS.length],
+      char:   CHARS[i % CHARS.length],
+      fontSize: 10 + (i % 4) * 5,
+      delay:  (i % 6) * 55,
+      rotateTo: (i % 2 === 0 ? 1 : -1) * 480,
+    });
+  }
+
+  // Bottom edge → fly up
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    pieces.push({
+      startX: SCREEN_W * (0.05 + 0.9 * t),
+      startY: SCREEN_H + 40,
+      endX:   SCREEN_W * (0.05 + 0.9 * t) + (i % 5 - 2) * 50,
+      endY:   -40,
+      color:  COLORS[(i + 3) % COLORS.length],
+      char:   CHARS[(i + 2) % CHARS.length],
+      fontSize: 10 + (i % 4) * 5,
+      delay:  (i % 5) * 65,
+      rotateTo: (i % 2 === 0 ? -1 : 1) * 480,
+    });
+  }
+
+  // Left edge → fly right
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    pieces.push({
+      startX: -40,
+      startY: SCREEN_H * (0.1 + 0.8 * t),
+      endX:   SCREEN_W + 40,
+      endY:   SCREEN_H * (0.1 + 0.8 * t) + (i % 5 - 2) * 50,
+      color:  COLORS[(i + 5) % COLORS.length],
+      char:   CHARS[(i + 3) % CHARS.length],
+      fontSize: 10 + (i % 3) * 5,
+      delay:  (i % 4) * 70,
+      rotateTo: (i % 2 === 0 ? 1 : -1) * 360,
+    });
+  }
+
+  // Right edge → fly left
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    pieces.push({
+      startX: SCREEN_W + 40,
+      startY: SCREEN_H * (0.1 + 0.8 * t),
+      endX:   -40,
+      endY:   SCREEN_H * (0.1 + 0.8 * t) + (i % 5 - 2) * 50,
+      color:  COLORS[(i + 2) % COLORS.length],
+      char:   CHARS[(i + 4) % CHARS.length],
+      fontSize: 10 + (i % 3) * 5,
+      delay:  (i % 6) * 60,
+      rotateTo: (i % 2 === 0 ? -1 : 1) * 360,
+    });
+  }
+
+  return pieces;
+}
+
+const PIECES = makePieces();
 
 // ---------------------------------------------------------------------------
 // Individual confetti piece
 // ---------------------------------------------------------------------------
 
-interface PieceProps extends PieceConfig {
-  isLast: boolean;
-  onDone?: () => void;
-}
-
-function ConfettiPiece({ startX, color, char, fontSize, delay, swayX, isLast, onDone }: PieceProps) {
-  // Store onDone in a ref so the stable callback below always calls the latest value
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
-
-  // Stable function reference — safe to pass into runOnJS
-  const notifyDone = useCallback(() => {
-    onDoneRef.current?.();
-  }, []);
-
-  const duration = FALL_DURATION - delay;
-
-  const y = useSharedValue(-30);
-  const x = useSharedValue(0);
+function ConfettiPiece({ piece }: { piece: PieceConfig }) {
+  // Each piece starts at its edge position and travels to the opposite side.
+  // `position: absolute; left: 0; top: 0` + translateX/Y places it precisely.
+  const x = useSharedValue(piece.startX);
+  const y = useSharedValue(piece.startY);
   const rotate = useSharedValue(0);
   const opacity = useSharedValue(1);
 
   useEffect(() => {
-    // Fall straight down
-    y.value = withDelay(
-      delay,
-      withTiming(SCREEN_H + 30, { duration, easing: Easing.in(Easing.quad) }),
+    x.value      = piece.delay > 0
+      ? (() => { x.value = piece.startX; return withTiming(piece.endX, { duration: TRAVEL }) })()
+      : withTiming(piece.endX, { duration: TRAVEL });
+    y.value      = withTiming(piece.endY,      { duration: TRAVEL });
+    rotate.value = withTiming(piece.rotateTo,  { duration: TRAVEL });
+    opacity.value = withSequence(
+      withTiming(1, { duration: TRAVEL * 0.7 }),
+      withTiming(0, { duration: TRAVEL * 0.3 }),
     );
-    // Gentle side sway
-    x.value = withDelay(delay, withTiming(swayX, { duration }));
-    // Spin 1.5 full rotations
-    rotate.value = withDelay(delay, withTiming(540, { duration }));
-    // Fade out during the last 35 % of the piece's fall; the last piece calls onDone
-    opacity.value = withDelay(
-      delay + duration * 0.65,
-      withTiming(0, { duration: duration * 0.35 }, (finished) => {
-        'worklet';
-        if (finished && isLast) {
-          runOnJS(notifyDone)();
-        }
-      }),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount only
 
-  const animStyle = useAnimatedStyle(() => ({
+    // Stagger start: cancel and restart with a delay
+    if (piece.delay > 0) {
+      x.value = piece.startX;
+      y.value = piece.startY;
+      rotate.value = 0;
+      opacity.value = 0;
+
+      const t = setTimeout(() => {
+        x.value      = withTiming(piece.endX,     { duration: TRAVEL });
+        y.value      = withTiming(piece.endY,     { duration: TRAVEL });
+        rotate.value = withTiming(piece.rotateTo, { duration: TRAVEL });
+        opacity.value = withSequence(
+          withTiming(1, { duration: TRAVEL * 0.7 }),
+          withTiming(0, { duration: TRAVEL * 0.3 }),
+        );
+      }, piece.delay);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: 0,
+    top: 0,
     transform: [
-      { translateY: y.value },
       { translateX: x.value },
+      { translateY: y.value },
       { rotate: `${rotate.value}deg` },
     ],
     opacity: opacity.value,
   }));
 
   return (
-    <Animated.Text
-      style={[
-        {
-          position: 'absolute',
-          left: startX,
-          top: 0,
-          fontSize,
-          lineHeight: fontSize + 6,
-          color,
-        },
-        animStyle,
-      ]}
-    >
-      {char}
+    <Animated.Text style={[{ fontSize: piece.fontSize, color: piece.color }, style]}>
+      {piece.char}
     </Animated.Text>
   );
 }
@@ -157,25 +202,100 @@ function ConfettiPiece({ startX, color, char, fontSize, delay, swayX, isLast, on
 // ---------------------------------------------------------------------------
 
 interface Props {
-  /** When true the confetti starts playing.  Flip to false to hide instantly. */
+  /** When true the overlay mounts and the animation plays. */
   visible: boolean;
-  /** Called once, ~1.4 s after becoming visible, when the last piece fades out. */
+  /** Called ~2.2 s after mounting, once the message has fully faded out. */
   onDone?: () => void;
 }
 
 export default function Confetti({ visible, onDone }: Props) {
+  // Keep onDone in a ref so the animated callback always calls the latest value
+  // without needing to be in the dependency array.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  const notify = useCallback(() => { onDoneRef.current?.(); }, []);
+
+  // Message animation shared values
+  const msgOpacity = useSharedValue(0);
+  const msgScale   = useSharedValue(0.6);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    // Reset to start state (handles re-plays)
+    msgOpacity.value = 0;
+    msgScale.value   = 0.6;
+
+    // Fade in → hold → fade out; call onDone when fade-out finishes
+    msgOpacity.value = withSequence(
+      withTiming(1, { duration: MSG_IN }),
+      withTiming(1, { duration: MSG_HOLD }),   // hold at full opacity
+      withTiming(0, { duration: MSG_OUT }, (finished) => {
+        'worklet';
+        if (finished) runOnJS(notify)();
+      }),
+    );
+    msgScale.value = withSpring(1, { damping: 12, stiffness: 100 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: msgOpacity.value * 0.55,
+  }));
+
+  const msgStyle = useAnimatedStyle(() => ({
+    opacity: msgOpacity.value,
+    transform: [{ scale: msgScale.value }],
+  }));
+
+  // Returning null unmounts all ConfettiPiece children (resetting their
+  // shared values) so the next burst always starts from the edges.
   if (!visible) return null;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {/* Confetti pieces from all four edges */}
       {PIECES.map((piece, i) => (
-        <ConfettiPiece
-          key={i}
-          {...piece}
-          isLast={i === PIECE_COUNT - 1}
-          onDone={onDone}
-        />
+        <ConfettiPiece key={i} piece={piece} />
       ))}
+
+      {/* Dark backdrop — improves legibility of the message */}
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} />
+
+      {/* Celebration message */}
+      <Animated.View style={[styles.messageContainer, msgStyle]}>
+        <Text style={styles.messageText}>🎉 You have someone new{'\n'}to celebrate! 🎊</Text>
+      </Animated.View>
     </View>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
+const styles = StyleSheet.create({
+  backdrop: {
+    backgroundColor: '#000',
+  },
+  messageContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  messageText: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 36,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+});

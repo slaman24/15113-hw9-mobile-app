@@ -25,7 +25,7 @@
 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -38,11 +38,11 @@ import {
   View,
 } from 'react-native';
 
-import Confetti from '@/components/confetti';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BirthdayEntry } from '@/types/birthday';
 import { parseDateFromISO } from '@/utils/dateUtils';
+import { triggerCelebrate } from '@/utils/celebrateFlag';
 import { addEntry } from '@/utils/storage';
 
 /** Maximum allowed length for the notes field (from the spec). */
@@ -73,16 +73,6 @@ export default function AddScreen() {
   // Date picker visibility state
   // -------------------------------------------------------------------------
   const [showDatePicker, setShowDatePicker] = useState(false);
-
-  // -------------------------------------------------------------------------
-  // Confetti state
-  // -------------------------------------------------------------------------
-  const [showConfetti, setShowConfetti] = useState(false);
-
-  // Called by the Confetti component when its animation finishes (~1.4 s)
-  const navigateHome = useCallback(() => {
-    router.replace('/(tabs)');
-  }, []);
 
   // -------------------------------------------------------------------------
   // Date picker handler
@@ -228,8 +218,9 @@ export default function AddScreen() {
       setBirthdayError('');
       setNotesError('');
 
-      // Play confetti — navigation to Home happens in navigateHome (onDone callback)
-      setShowConfetti(true);
+      // Signal the Home screen to play the celebration, then navigate there immediately
+      triggerCelebrate();
+      router.replace('/(tabs)');
     } catch (err) {
       console.error('[AddScreen] Failed to save entry:', err);
       // Show an alert — don't navigate away so the user can try again
@@ -271,15 +262,11 @@ export default function AddScreen() {
      * `behavior` is platform-specific:
      *   - 'padding' (iOS): adds padding to the bottom of the view
      *   - 'height' (Android): shrinks the view's height
-     *
-     * The outer fragment allows Confetti to be rendered as a sibling that
-     * covers the entire screen (absoluteFill) without disrupting the layout.
      */
-    <>
-      <KeyboardAvoidingView
-        style={[styles.flex, { backgroundColor: colors.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+    <KeyboardAvoidingView
+      style={[styles.flex, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}
@@ -411,11 +398,7 @@ export default function AddScreen() {
           <Text style={styles.saveButtonText}>Save Birthday</Text>
         </TouchableOpacity>
       </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Confetti overlay — shown after a successful save, navigates home when done */}
-      <Confetti visible={showConfetti} onDone={navigateHome} />
-    </>
+    </KeyboardAvoidingView>
   );
 }
 

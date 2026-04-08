@@ -30,7 +30,9 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BirthdayEntry } from '@/types/birthday';
 import { daysUntilBirthday, daysUntilLabel, formatBirthdayDate } from '@/utils/dateUtils';
+import { consumeCelebrate } from '@/utils/celebrateFlag';
 import { loadEntries } from '@/utils/storage';
+import Confetti from '@/components/confetti';
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -42,6 +44,9 @@ export default function HomeScreen() {
   // True when AsyncStorage fails on load — we show an error banner instead
   // of crashing the app
   const [loadError, setLoadError] = useState(false);
+
+  // True while the celebration confetti overlay is playing
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // -------------------------------------------------------------------------
   // Data loading
@@ -63,6 +68,12 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+
+      // Check the celebrate flag synchronously — before the async load.
+      // consumeCelebrate() returns true exactly once after a new birthday is saved.
+      if (consumeCelebrate()) {
+        setShowCelebration(true);
+      }
 
       const loadBirthdays = async () => {
         try {
@@ -195,6 +206,12 @@ export default function HomeScreen() {
             </Text>
           </View>
         }
+      />
+
+      {/* Celebration overlay — plays once after a new birthday is saved */}
+      <Confetti
+        visible={showCelebration}
+        onDone={() => setShowCelebration(false)}
       />
     </View>
   );
