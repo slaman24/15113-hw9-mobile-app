@@ -63,6 +63,50 @@ export default function RootLayout() {
             ),
           }}
         />
+
+        {/* AF1 — Wishlist view screen */}
+        <Stack.Screen
+          name="wishlist/[id]"
+          options={{
+            title: 'Wishlist',
+            headerStyle: { backgroundColor: colors.headerBackground },
+            headerTintColor: colors.text,
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() =>
+                  router.canGoBack() ? router.back() : router.replace('/(tabs)')
+                }
+                style={{ paddingLeft: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <Ionicons name="chevron-back" size={26} color={colors.tint} />
+              </TouchableOpacity>
+            ),
+          }}
+        />
+
+        {/* AF3 — Group Gift detail screen */}
+        <Stack.Screen
+          name="group-gift/[id]"
+          options={{
+            title: 'Group Gift Details',
+            headerStyle: { backgroundColor: colors.headerBackground },
+            headerTintColor: colors.text,
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() =>
+                  router.canGoBack() ? router.back() : router.replace('/(tabs)/group-gifts')
+                }
+                style={{ paddingLeft: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <Ionicons name="chevron-back" size={26} color={colors.tint} />
+              </TouchableOpacity>
+            ),
+          }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

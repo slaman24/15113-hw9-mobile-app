@@ -1,19 +1,8 @@
 /**
  * Home Screen — displays all upcoming birthdays sorted by how soon they occur.
  *
- * Key concepts used here:
- *
- *  • useFocusEffect  — a React Navigation hook that runs a callback every
- *    time this screen comes into focus (i.e., becomes visible).  We use it
- *    instead of useEffect so the list refreshes automatically after the user
- *    adds or edits a birthday and navigates back here.
- *
- *  • FlatList  — React Native's high-performance scrollable list. Unlike
- *    mapping array items into a <View>, FlatList only renders items currently
- *    visible on screen, which keeps the app fast with large datasets.
- *
- *  • router.push  — from expo-router; navigates to a new screen by pushing
- *    it onto the navigation stack.
+ * AF2: adds a "List" / "Calendar" toggle and a monthly calendar grid.
+ * AF1: adds a "View Wishlist" button on cards that have wishlist items.
  */
 
 import { useFocusEffect, router } from 'expo-router';
@@ -31,15 +20,61 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { BirthdayEntry } from '@/types/birthday';
 import { daysUntilBirthday, daysUntilLabel, formatBirthdayDate } from '@/utils/dateUtils';
 import { consumeCelebrate } from '@/utils/celebrateFlag';
-import { loadEntries } from '@/utils/storage';
+import { ensureSeeded } from '@/utils/seed';
+import { loadEntries, loadGroupGifts, loadWishlistItems } from '@/utils/storage';
 import Confetti from '@/components/confetti';
+
+// ---------------------------------------------------------------------------
+// Calendar helpers
+// ---------------------------------------------------------------------------
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
+
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function getFirstDayOfMonth(year: number, month: number): number {
+  return new Date(year, month, 1).getDay(); // 0=Sun
+}
+
+/** Returns month (0-indexed) and day for a birthday in a given year, applying leap-day rule. */
+function birthdayMonthDay(birthdayISO: string, year: number): { month: number; day: number } {
+  const parts = birthdayISO.split('-');
+  const bMonth = parseInt(parts[1], 10) - 1;
+  const bDay = parseInt(parts[2], 10);
+  const isLeap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  if (bMonth === 1 && bDay === 29 && !isLeap(year)) {
+    return { month: 2, day: 1 };
+  }
+  return { month: bMonth, day: bDay };
+}
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
+  // List vs Calendar toggle (default: List per AF2 spec)
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+
+  // Calendar navigation state
+  const today = new Date();
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const [calMonth, setCalMonth] = useState(today.getMonth()); // 0-indexed
+  const [selectedCalDay, setSelectedCalDay] = useState<number | null>(null);
+
   // The sorted list of birthday entries shown in the FlatList
   const [entries, setEntries] = useState<BirthdayEntry[]>([]);
+
+  // Map of birthdayEntryId → true for entries that have at least one wishlist item
+  const [wishlistMap, setWishlistMap] = useState<Record<string, boolean>>({});
+
+  // Map of birthdayEntryId → group gift ID for open campaigns
+  const [groupGiftMap, setGroupGiftMap] = useState<Record<string, string>>({});
 
   // True when AsyncStorage fails on load — we show an error banner instead
   // of crashing the app
@@ -77,9 +112,28 @@ export default function HomeScreen() {
 
       const loadBirthdays = async () => {
         try {
+          // Seed demo data on first launch
+          await ensureSeeded();
+
           const data = await loadEntries();
+          const wishlistData = await loadWishlistItems();
+          const groupGiftsData = await loadGroupGifts();
 
           if (!active) return;
+
+          // Build map of entry IDs that have at least one wishlist item
+          const entryIdsWithWishlists: Record<string, boolean> = {};
+          for (const item of wishlistData) {
+            entryIdsWithWishlists[item.birthdayEntryId] = true;
+          }
+
+          // Build map of entry IDs → group gift ID for open campaigns
+          const entryToGroupGift: Record<string, string> = {};
+          for (const gift of groupGiftsData) {
+            if (gift.status === 'open') {
+              entryToGroupGift[gift.birthdayEntryId] = gift.id;
+            }
+          }
 
           // Sort entries so the birthday with the fewest days remaining
           // appears first (ascending order of daysUntilBirthday)
@@ -87,6 +141,8 @@ export default function HomeScreen() {
             (a, b) => daysUntilBirthday(a.birthday) - daysUntilBirthday(b.birthday),
           );
           setEntries(sorted);
+          setWishlistMap(entryIdsWithWishlists);
+          setGroupGiftMap(entryToGroupGift);
           setLoadError(false);
         } catch (err) {
           console.error('[HomeScreen] Failed to load entries:', err);
@@ -113,14 +169,15 @@ export default function HomeScreen() {
   /**
    * renderItem is called by FlatList for each entry in the array.
    * Each card shows the person's name, the human-readable birthday date,
-   * how many days away it is, and optional notes.
-   * Tapping the card navigates to the Edit screen for that entry.
+   * how many days away it is, optional notes, and a wishlist button (AF1).
    */
   const renderItem = ({ item, index }: { item: BirthdayEntry; index: number }) => {
-    const label = daysUntilLabel(item.birthday);             // e.g. "3 days away"
-    const formattedDate = formatBirthdayDate(item.birthday); // e.g. "April 8"
+    const label = daysUntilLabel(item.birthday);
+    const formattedDate = formatBirthdayDate(item.birthday);
     const isToday = daysUntilBirthday(item.birthday) === 0;
     const accentColor = colors.cardAccents[index % colors.cardAccents.length];
+    const hasWishlist = !!wishlistMap[item.id];
+    const groupGiftId = groupGiftMap[item.id];
 
     return (
       <TouchableOpacity
@@ -132,8 +189,6 @@ export default function HomeScreen() {
             borderWidth: 2,
           },
         ]}
-        // router.push navigates to the dynamic Edit route, passing the id
-        // in the URL path.  Expo Router provides it as a param to that screen.
         onPress={() => router.push(`/edit/${item.id}`)}
         accessibilityRole="button"
         accessibilityLabel={`${item.name}, birthday ${formattedDate}, ${label}`}
@@ -149,17 +204,177 @@ export default function HomeScreen() {
         {/* Birthday formatted as "Month Day" */}
         <Text style={[styles.cardDate, { color: colors.icon }]}>{formattedDate}</Text>
 
-        {/*
-         * Only render the notes section when the notes string is non-empty.
-         * `item.notes.trim()` strips leading/trailing whitespace before the
-         * length check so a string of only spaces also hides the section.
-         */}
         {item.notes.trim().length > 0 && (
           <Text style={[styles.cardNotes, { color: colors.icon }]} numberOfLines={2}>
             {item.notes}
           </Text>
         )}
+
+        {/* AF1 — "View Wishlist" button (only shown when items exist) */}
+        {hasWishlist && (
+          <TouchableOpacity
+            style={[styles.wishlistButton, { borderColor: colors.tint }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/wishlist/${item.id}`);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${item.name}'s wishlist`}
+          >
+            <Text style={[styles.wishlistButtonText, { color: colors.tint }]}>
+              🎁 View Wishlist
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* AF3 — "View Group Gift" button (only shown when an open campaign exists) */}
+        {groupGiftId && (
+          <TouchableOpacity
+            style={[styles.wishlistButton, { borderColor: colors.tint, marginTop: hasWishlist ? 6 : 10 }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/group-gift/${groupGiftId}`);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`View group gift for ${item.name}`}
+          >
+            <Text style={[styles.wishlistButtonText, { color: colors.tint }]}>
+              👥 View Group Gift
+            </Text>
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
+    );
+  };
+
+  // -------------------------------------------------------------------------
+  // Calendar view helpers (AF2)
+  // -------------------------------------------------------------------------
+
+  const prevMonth = () => {
+    setSelectedCalDay(null);
+    if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); }
+    else { setCalMonth((m) => m - 1); }
+  };
+
+  const nextMonth = () => {
+    setSelectedCalDay(null);
+    if (calMonth === 11) { setCalMonth(0); setCalYear((y) => y + 1); }
+    else { setCalMonth((m) => m + 1); }
+  };
+
+  const entriesOnDay = (day: number): BirthdayEntry[] =>
+    entries.filter((e) => {
+      const { month, day: bDay } = birthdayMonthDay(e.birthday, calYear);
+      return month === calMonth && bDay === day;
+    });
+
+  const renderCalendar = () => {
+    const daysInMonth = getDaysInMonth(calYear, calMonth);
+    const firstDay = getFirstDayOfMonth(calYear, calMonth);
+
+    const cells: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const rows: (number | null)[][] = [];
+    for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+
+    const todayDay =
+      today.getFullYear() === calYear && today.getMonth() === calMonth
+        ? today.getDate()
+        : null;
+
+    const panelEntries = selectedCalDay ? entriesOnDay(selectedCalDay) : [];
+
+    return (
+      <View>
+        {/* Month navigation */}
+        <View style={styles.calNav}>
+          <TouchableOpacity onPress={prevMonth} accessibilityRole="button" accessibilityLabel="Previous month">
+            <Text style={[styles.calNavArrow, { color: colors.tint }]}>‹</Text>
+          </TouchableOpacity>
+          <Text style={[styles.calMonthLabel, { color: colors.text }]}>
+            {MONTH_NAMES[calMonth]} {calYear}
+          </Text>
+          <TouchableOpacity onPress={nextMonth} accessibilityRole="button" accessibilityLabel="Next month">
+            <Text style={[styles.calNavArrow, { color: colors.tint }]}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Day-of-week headers */}
+        <View style={styles.calDayHeaders}>
+          {DAY_LABELS.map((d) => (
+            <Text key={d} style={[styles.calDayHeader, { color: colors.icon }]}>{d}</Text>
+          ))}
+        </View>
+
+        {/* Calendar grid rows */}
+        {rows.map((row, rowIndex) => (
+          <View key={rowIndex} style={styles.calRow}>
+            {row.map((day, colIndex) => {
+              if (!day) return <View key={colIndex} style={styles.calCell} />;
+              const bdEntries = entriesOnDay(day);
+              const hasBirthday = bdEntries.length > 0;
+              const isToday = day === todayDay;
+              const isSelected = day === selectedCalDay;
+
+              return (
+                <TouchableOpacity
+                  key={colIndex}
+                  style={[
+                    styles.calCell,
+                    isToday && { borderWidth: 1.5, borderColor: colors.tint, borderRadius: 8 },
+                    isSelected && hasBirthday && { backgroundColor: colors.tint, borderRadius: 8 },
+                  ]}
+                  onPress={() => hasBirthday && setSelectedCalDay(isSelected ? null : day)}
+                  disabled={!hasBirthday}
+                  accessibilityRole={hasBirthday ? 'button' : 'none'}
+                >
+                  <Text
+                    style={[
+                      styles.calDayNumber,
+                      {
+                        color: isSelected && hasBirthday ? '#fff' : isToday ? colors.tint : colors.text,
+                        fontWeight: isToday ? '700' : '400',
+                      },
+                    ]}
+                  >
+                    {day}
+                  </Text>
+                  {hasBirthday && (
+                    <View style={[styles.calDot, { backgroundColor: isSelected ? '#fff' : colors.tint }]} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ))}
+
+        {/* Birthday detail panel */}
+        {selectedCalDay !== null && panelEntries.length > 0 && (
+          <View style={[styles.calPanel, { backgroundColor: colors.cardBackground }]}>
+            <Text style={[styles.calPanelTitle, { color: colors.text }]}>
+              {MONTH_NAMES[calMonth]} {selectedCalDay}
+            </Text>
+            {panelEntries.map((e) => (
+              <TouchableOpacity
+                key={e.id}
+                style={styles.calPanelRow}
+                onPress={() => router.push(`/edit/${e.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${e.name}`}
+              >
+                <Text style={[styles.calPanelName, { color: colors.text }]}>{e.name}</Text>
+                <Text style={[styles.calPanelLabel, { color: colors.tint }]}>
+                  {daysUntilLabel(e.birthday)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -178,35 +393,57 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/*
-       * FlatList renders the sorted birthday cards.
-       *
-       * keyExtractor tells FlatList which field to use as a unique key for
-       * each item — this is how React efficiently updates only the items
-       * that changed when the list re-renders.
-       *
-       * ListEmptyComponent is rendered automatically when `data` is empty.
-       * contentContainerStyle gets extra flex-centering when empty so the
-       * message appears in the middle of the screen.
-       */}
-      <FlatList
-        data={entries}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={
-          entries.length === 0 ? styles.emptyContainer : styles.listContent
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No birthdays yet!</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.icon }]}>
-              Tap the{' '}
-              <Text style={{ fontWeight: '700' }}>Add Birthday</Text>
-              {' '}tab below to add your first entry.
-            </Text>
-          </View>
-        }
-      />
+      {/* AF2 — List / Calendar toggle */}
+      <View style={[styles.toggleBar, { backgroundColor: colors.headerBackground }]}>
+        <TouchableOpacity
+          style={[styles.toggleButton, viewMode === 'list' && { backgroundColor: colors.tint }]}
+          onPress={() => setViewMode('list')}
+          accessibilityRole="button"
+          accessibilityLabel="List view"
+        >
+          <Text style={[styles.toggleButtonText, { color: viewMode === 'list' ? '#fff' : colors.icon }]}>
+            List
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, viewMode === 'calendar' && { backgroundColor: colors.tint }]}
+          onPress={() => setViewMode('calendar')}
+          accessibilityRole="button"
+          accessibilityLabel="Calendar view"
+        >
+          <Text style={[styles.toggleButtonText, { color: viewMode === 'calendar' ? '#fff' : colors.icon }]}>
+            Calendar
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {viewMode === 'list' ? (
+        <FlatList
+          data={entries}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={
+            entries.length === 0 ? styles.emptyContainer : styles.listContent
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No birthdays yet!</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.icon }]}>
+                Tap the{' '}
+                <Text style={{ fontWeight: '700' }}>Add Birthday</Text>
+                {' '}tab below to add your first entry.
+              </Text>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={[null as null]}
+          keyExtractor={() => 'calendar'}
+          renderItem={() => renderCalendar()}
+          contentContainerStyle={styles.calendarContent}
+        />
+      )}
 
       {/* Celebration overlay — plays once after a new birthday is saved */}
       <Confetti
@@ -220,22 +457,15 @@ export default function HomeScreen() {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
-// StyleSheet.create() is React Native's equivalent of CSS classes.
-// All sizes are in "density-independent pixels" (dp) — the same number looks
-// roughly the same physical size on all screen densities.
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1, // Take up all available vertical space
+    flex: 1,
   },
-
-  // Padding around the cards in the list
   listContent: {
     padding: 16,
-    gap: 12, // vertical space between cards
+    gap: 12,
   },
-
-  // When the list is empty, centre the content vertically
   emptyContainer: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -246,7 +476,6 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     padding: 16,
-    // Shadow on iOS (Android uses `elevation`)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -254,7 +483,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardHeader: {
-    flexDirection: 'row',           // Line name and days badge side-by-side
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 4,
@@ -262,7 +491,7 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: 18,
     fontWeight: '600',
-    flex: 1,         // Allows the name to wrap; the badge stays on the right
+    flex: 1,
     marginRight: 8,
   },
   cardDays: {
@@ -277,6 +506,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontStyle: 'italic',
     marginTop: 4,
+  },
+  wishlistButton: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1.5,
+  },
+  wishlistButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   // ---- Empty state ---------------------------------------------------------
@@ -299,12 +540,110 @@ const styles = StyleSheet.create({
   errorBanner: {
     padding: 12,
     backgroundColor: '#FFF3CD',
-    borderBottomWidth: 1,
-    borderBottomColor: '#FFECB5',
   },
   errorBannerText: {
     color: '#856404',
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
+  },
+
+  // ---- List / Calendar toggle (AF2) ----------------------------------------
+  toggleBar: {
+    flexDirection: 'row',
+    margin: 12,
+    borderRadius: 10,
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  toggleButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // ---- Calendar (AF2) ------------------------------------------------------
+  calendarContent: {
+    padding: 12,
+  },
+  calNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  calNavArrow: {
+    fontSize: 28,
+    fontWeight: '300',
+    paddingHorizontal: 12,
+  },
+  calMonthLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  calDayHeaders: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  calDayHeader: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    paddingVertical: 4,
+  },
+  calRow: {
+    flexDirection: 'row',
+  },
+  calCell: {
+    flex: 1,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 1,
+  },
+  calDayNumber: {
+    fontSize: 14,
+  },
+  calDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginTop: 2,
+  },
+  calPanel: {
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  calPanelTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  calPanelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#CCC',
+  },
+  calPanelName: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  calPanelLabel: {
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

@@ -31,3 +31,41 @@ export interface BirthdayEntry {
   /** ISO 8601 timestamp updated on every save (create or update). */
   updatedAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// AF1 — Gift Wishlists
+// ---------------------------------------------------------------------------
+
+export interface WishlistItem {
+  id: string;
+  birthdayEntryId: string;
+  title: string;
+  url?: string;
+  notes?: string;
+  claimedBy?: string;
+  claimedAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// AF3 — Group Gift Organizer
+// ---------------------------------------------------------------------------
+
+export interface GroupGift {
+  id: string;
+  birthdayEntryId: string;
+  giftDescription: string;
+  targetAmount?: number;
+  captainName: string;
+  createdAt: string;
+  status: 'open' | 'closed';
+}
+
+export interface GroupGiftContribution {
+  id: string;
+  groupGiftId: string;
+  contributorName: string;
+  amount?: number;
+  item?: string;
+  note?: string;
+  addedAt: string;
+}

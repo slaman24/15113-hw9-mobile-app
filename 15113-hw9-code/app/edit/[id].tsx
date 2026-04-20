@@ -25,10 +25,13 @@
 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -40,9 +43,16 @@ import {
 
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { BirthdayEntry } from '@/types/birthday';
+import { BirthdayEntry, WishlistItem } from '@/types/birthday';
 import { parseDateFromISO } from '@/utils/dateUtils';
-import { deleteEntry, loadEntries, updateEntry } from '@/utils/storage';
+import { generateId } from '@/utils/generateId';
+import {
+  addWishlistItem,
+  deleteEntry,
+  loadEntries,
+  loadWishlistForEntry,
+  updateEntry,
+} from '@/utils/storage';
 
 const MAX_NOTES_LENGTH = 500;
 
@@ -95,6 +105,17 @@ export default function EditScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // -------------------------------------------------------------------------
+  // Wishlist state
+  // -------------------------------------------------------------------------
+
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [newItemUrl, setNewItemUrl] = useState('');
+  const [newItemNotes, setNewItemNotes] = useState('');
+  const [newItemTitleError, setNewItemTitleError] = useState('');
+
+  // -------------------------------------------------------------------------
   // Load the entry on mount
   // -------------------------------------------------------------------------
 
@@ -111,6 +132,10 @@ export default function EditScreen() {
           // parseDateFromISO converts "YYYY-MM-DD" to a local-timezone Date
           setSelectedDate(parseDateFromISO(found.birthday));
           setNotes(found.notes);
+
+          // Load wishlist items for this entry
+          const items = await loadWishlistForEntry(found.id);
+          setWishlistItems(items);
         } else {
           // The id doesn't match any stored entry — show the "not found" UI
           setNotFound(true);
@@ -259,6 +284,47 @@ export default function EditScreen() {
           },
         },
       ],
+    );
+  };
+
+  // -------------------------------------------------------------------------
+  // Wishlist handlers
+  // -------------------------------------------------------------------------
+
+  const handleAddWishlistItem = async () => {
+    if (newItemTitle.trim().length === 0) {
+      setNewItemTitleError('Title is required.');
+      return;
+    }
+
+    const item: WishlistItem = {
+      id: generateId(),
+      birthdayEntryId: id,
+      title: newItemTitle.trim(),
+      url: newItemUrl.trim() || undefined,
+      notes: newItemNotes.trim() || undefined,
+    };
+
+    try {
+      await addWishlistItem(item);
+      setWishlistItems((prev) => [...prev, item]);
+      setShowAddItemModal(false);
+      setNewItemTitle('');
+      setNewItemUrl('');
+      setNewItemNotes('');
+      setNewItemTitleError('');
+    } catch (err) {
+      console.error('[EditScreen] Failed to save wishlist item:', err);
+      Alert.alert('Save Failed', 'The item could not be saved. Please try again.', [{ text: 'OK' }]);
+    }
+  };
+
+  const handleOpenUrl = (url: string) => {
+    const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+    WebBrowser.openBrowserAsync(fullUrl).catch(() =>
+      Linking.openURL(fullUrl).catch(() =>
+        Alert.alert('Cannot Open Link', 'Unable to open this URL.', [{ text: 'OK' }])
+      )
     );
   };
 
@@ -436,7 +502,143 @@ export default function EditScreen() {
         >
           <Text style={styles.deleteButtonText}>Delete Birthday</Text>
         </TouchableOpacity>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Wishlist section (AF1)                                            */}
+        {/* ---------------------------------------------------------------- */}
+        <View style={styles.wishlistSection}>
+          <View style={styles.wishlistHeader}>
+            <Text style={[styles.wishlistTitle, { color: colors.text }]}>Wishlist</Text>
+            <TouchableOpacity
+              style={[styles.addItemButton, { backgroundColor: colors.tint }]}
+              onPress={() => setShowAddItemModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Add wishlist item"
+            >
+              <Text style={styles.addItemButtonText}>+ Add Item</Text>
+            </TouchableOpacity>
+          </View>
+
+          {wishlistItems.length === 0 ? (
+            <Text style={[styles.wishlistEmpty, { color: colors.icon }]}>
+              No wishlist items yet. Tap "+ Add Item" to add one.
+            </Text>
+          ) : (
+            wishlistItems.map((item) => (
+              <View
+                key={item.id}
+                style={[styles.wishlistItemCard, { backgroundColor: colors.cardBackground }]}
+              >
+                <Text style={[styles.wishlistItemTitle, { color: colors.text }]}>
+                  {item.title}
+                </Text>
+                {item.url ? (
+                  <TouchableOpacity onPress={() => handleOpenUrl(item.url!)}>
+                    <Text style={[styles.wishlistItemUrl, { color: colors.tint }]} numberOfLines={1}>
+                      {item.url}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {item.notes ? (
+                  <Text style={[styles.wishlistItemNotes, { color: colors.icon }]}>
+                    {item.notes}
+                  </Text>
+                ) : null}
+                {item.claimedBy ? (
+                  <Text style={[styles.wishlistItemClaimed, { color: '#16A34A' }]}>
+                    🔒 Claimed by {item.claimedBy}
+                  </Text>
+                ) : (
+                  <Text style={[styles.wishlistItemUnclaimed, { color: colors.icon }]}>
+                    Unclaimed
+                  </Text>
+                )}
+              </View>
+            ))
+          )}
+        </View>
       </ScrollView>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Add Wishlist Item Modal                                             */}
+      {/* ------------------------------------------------------------------ */}
+      <Modal
+        visible={showAddItemModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAddItemModal(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Add Wishlist Item</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowAddItemModal(false);
+                setNewItemTitle('');
+                setNewItemUrl('');
+                setNewItemNotes('');
+                setNewItemTitleError('');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Close modal"
+            >
+              <Text style={[styles.modalClose, { color: colors.tint }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView keyboardShouldPersistTaps="handled">
+            <Text style={[styles.label, { color: colors.text }]}>Title *</Text>
+            <TextInput
+              style={[
+                styles.input,
+                { color: colors.text, borderColor: newItemTitleError ? '#DC3545' : '#CCC' },
+              ]}
+              placeholder="e.g. Kindle Paperwhite"
+              placeholderTextColor={colors.icon}
+              value={newItemTitle}
+              onChangeText={(t) => {
+                setNewItemTitle(t);
+                if (newItemTitleError && t.trim().length > 0) setNewItemTitleError('');
+              }}
+              autoCapitalize="sentences"
+            />
+            {newItemTitleError ? (
+              <Text style={styles.errorText}>{newItemTitleError}</Text>
+            ) : null}
+
+            <Text style={[styles.label, { color: colors.text }]}>URL (optional)</Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: '#CCC' }]}
+              placeholder="https://..."
+              placeholderTextColor={colors.icon}
+              value={newItemUrl}
+              onChangeText={setNewItemUrl}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+
+            <Text style={[styles.label, { color: colors.text }]}>Notes (optional)</Text>
+            <TextInput
+              style={[styles.input, styles.notesInput, { color: colors.text, borderColor: '#CCC' }]}
+              placeholder="Size, color, any details…"
+              placeholderTextColor={colors.icon}
+              value={newItemNotes}
+              onChangeText={setNewItemNotes}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity
+              style={[styles.saveButton, { backgroundColor: colors.tint }]}
+              onPress={handleAddWishlistItem}
+              accessibilityRole="button"
+              accessibilityLabel="Save wishlist item"
+            >
+              <Text style={styles.saveButtonText}>Add to Wishlist</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -571,5 +773,94 @@ const styles = StyleSheet.create({
     color: '#DC3545',
     fontSize: 17,
     fontWeight: '600',
+  },
+
+  // ---- Wishlist section ----------------------------------------------------
+  wishlistSection: {
+    marginTop: 32,
+    paddingTop: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#CCC',
+  },
+  wishlistHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  wishlistTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  addItemButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addItemButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  wishlistEmpty: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  wishlistItemCard: {
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  wishlistItemTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  wishlistItemUrl: {
+    fontSize: 13,
+    marginBottom: 4,
+    textDecorationLine: 'underline',
+  },
+  wishlistItemNotes: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginBottom: 4,
+  },
+  wishlistItemClaimed: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  wishlistItemUnclaimed: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  // ---- Add Wishlist Item Modal ---------------------------------------------
+  modalContainer: {
+    flex: 1,
+    padding: 20,
+    paddingTop: 48,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalClose: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

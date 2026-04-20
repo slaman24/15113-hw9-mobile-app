@@ -55,6 +55,18 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="plus.circle.fill" color={color} />,
         }}
       />
+
+      {/*
+       * "group-gifts" matches `app/(tabs)/group-gifts.tsx`.
+       * AF3 — Group Gift Organizer tab.
+       */}
+      <Tabs.Screen
+        name="group-gifts"
+        options={{
+          title: 'Group Gifts',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.2.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

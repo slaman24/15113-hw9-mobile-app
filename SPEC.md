@@ -189,3 +189,231 @@ If the Edit screen is opened with an `id` that does not correspond to any stored
 - Photo attachments to birthday entries
 - Age calculation or birth year display in the card UI (data is stored but not shown)
 - Search or filter functionality
+
+---
+
+<!-- ============================================================ -->
+<!-- ADDITIONAL FEATURES                                          -->
+<!-- ============================================================ -->
+
+## Additional Features
+
+---
+
+### AF1 — Gift Wishlists
+
+#### Overview
+
+Each birthday entry can have an associated **wishlist** — a set of gift items the person would like to receive. Any user of the app can view a person's wishlist and **claim** an item to signal they intend to buy it, preventing duplicate gifts.
+
+#### Data Model Extensions
+
+```typescript
+interface WishlistItem {
+  id: string; // UUID
+  birthdayEntryId: string; // Foreign key → BirthdayEntry.id
+  title: string; // Short gift name (required, non-empty)
+  url?: string; // Optional link to the item (e.g., Amazon, store page)
+  notes?: string; // Optional extra detail (size, color, etc.)
+  claimedBy?: string; // Name of the person who claimed this item; undefined = unclaimed
+  claimedAt?: string; // ISO 8601 timestamp of when it was claimed
+}
+```
+
+AsyncStorage key: `@birthday_tracker:wishlists` → `JSON.stringify(WishlistItem[])`
+
+#### Dummy Data
+
+Pre-seed the following wishlist items for demo purposes:
+
+| Person (entry) | Item title                  | URL            | Claimed by |
+| -------------- | --------------------------- | -------------- | ---------- |
+| Alex           | Kindle Paperwhite           | amazon.com/…   | —          |
+| Alex           | Cozy knit sweater (size M)  | —              | Jamie      |
+| Jordan         | Hiking boots (size 10)      | rei.com/…      | —          |
+| Jordan         | Spotify Premium gift card   | —              | —          |
+| Taylor         | The Midnight Library (book) | bookshop.org/… | Sam        |
+
+#### Feature Details
+
+**F5.1 — Import / Add Wishlist Items**
+
+- On the Edit screen for a birthday entry, add a **"Wishlist"** section below the Notes field.
+- Users can tap **"Add Item"** to open a modal with fields for Title (required), URL (optional), and Notes (optional).
+- Items are saved immediately to AsyncStorage on submission; the modal dismisses and the item appears in the list.
+
+**F5.2 — View Wishlist**
+
+- On the Home screen birthday card, a **"View Wishlist"** button appears when one or more wishlist items exist for that entry.
+- Tapping it opens a **Wishlist screen** (modal or stack route) that lists all items for that person.
+- Each item shows: Title, URL (tappable link if provided), Notes, and claim status ("Claimed by [name]" or an unclaimed badge).
+
+**F5.3 — Claim an Item**
+
+- On the Wishlist screen, unclaimed items display a **"Claim"** button.
+- Tapping "Claim" prompts the user to enter their name, then marks the item as claimed (sets `claimedBy` and `claimedAt`) and persists the change.
+- Claimed items replace the "Claim" button with a locked indicator showing who claimed it ("Claimed by [name]").
+- A user cannot claim an item that is already claimed (the button is absent or disabled).
+- There is no un-claim flow in this version (out of scope).
+
+#### Acceptance Criteria — AF1
+
+- [ ] A birthday entry can have zero or more wishlist items.
+- [ ] The Edit screen shows an "Add Item" control and lists existing items for that entry.
+- [ ] Submitting the Add Item form without a title shows an inline error and does not save.
+- [ ] A valid item is saved to AsyncStorage and appears immediately in the list.
+- [ ] The Home screen card shows "View Wishlist" only when items exist for that person.
+- [ ] The Wishlist screen correctly lists all items with their title, optional URL, optional notes, and claim status.
+- [ ] Tapping a URL opens it in the device browser.
+- [ ] Tapping "Claim" on an unclaimed item prompts for the claimer's name and saves the claim.
+- [ ] A claimed item displays "Claimed by [name]" and no longer offers a "Claim" button.
+- [ ] Dummy data is pre-seeded and visible on first launch for demo purposes.
+
+---
+
+### AF2 — Calendar Interface
+
+#### Overview
+
+The **Home (Birthdays) tab** gains a **toggle** between the existing chronological list view and a new **monthly calendar view** that highlights only birthday dates — no holidays or system calendar events.
+
+#### Feature Details
+
+**F6.1 — View Toggle**
+
+- At the top of the Home screen, add a segmented control or icon-button pair labelled **"List"** and **"Calendar"**.
+- The selected view persists for the session (no need to persist across app restarts).
+- Default view on app launch is **List** (existing behavior unchanged).
+
+**F6.2 — Calendar View**
+
+- Render a single-month calendar grid (Sunday–Saturday columns, weeks as rows).
+- Navigation arrows (‹ ›) allow the user to move backward and forward one month at a time.
+- Dates that have one or more birthday entries are highlighted (e.g., accent-colored dot or filled circle below the date number).
+- Tapping a highlighted date expands or shows a small panel beneath the calendar listing the name(s) whose birthday falls on that day, with the same "days until" label used in the list view.
+- Tapping a name in that panel navigates to the Edit screen for that entry (same as tapping a card in list view).
+- Dates with no birthdays are non-interactive.
+
+**F6.3 — Dummy Data for Calendar Demo**
+
+Pre-seed birthday entries spread across at least three different months so the calendar view is visibly populated during the demo:
+
+| Name   | Birthday |
+| ------ | -------- |
+| Alex   | April 22 |
+| Jordan | May 10   |
+| Taylor | May 28   |
+| Morgan | June 3   |
+| Casey  | April 30 |
+
+#### Acceptance Criteria — AF2
+
+- [ ] The Home screen displays a "List" / "Calendar" toggle control.
+- [ ] Selecting "List" renders the existing chronological card list unchanged.
+- [ ] Selecting "Calendar" renders a monthly grid calendar.
+- [ ] The calendar shows only birthday-related highlights; no system calendar events or holidays appear.
+- [ ] Months can be navigated forward and backward with arrow controls.
+- [ ] Dates with at least one birthday are visually distinguished from empty dates.
+- [ ] Tapping a birthday date reveals the name(s) and "days until" label for that date.
+- [ ] Tapping a name in the date panel navigates to the correct Edit screen.
+- [ ] The default view on launch is List.
+
+---
+
+### AF3 — Group Gift Organizer
+
+#### Overview
+
+A dedicated **Group Gifts** tab allows users to coordinate a group gift for a person. One user declares themselves the **captain** of the group gift campaign and others can join, log their contributions, and track what is still needed.
+
+#### Navigation
+
+Add a third tab, **"Group Gifts"**, to the tab bar.
+
+```
+app/(tabs)/
+└── group-gifts.tsx   — Group Gift Organizer screen
+```
+
+#### Data Model
+
+```typescript
+interface GroupGift {
+  id: string; // UUID
+  birthdayEntryId: string; // Foreign key → BirthdayEntry.id (the recipient)
+  giftDescription: string; // What the group is buying (required)
+  targetAmount?: number; // Optional monetary target (e.g., 120.00)
+  captainName: string; // Name of the person who created/manages this campaign
+  createdAt: string; // ISO 8601 timestamp
+  status: "open" | "closed"; // 'closed' once the captain marks it done
+}
+
+interface GroupGiftContribution {
+  id: string; // UUID
+  groupGiftId: string; // Foreign key → GroupGift.id
+  contributorName: string; // Name of the contributor
+  amount?: number; // Optional monetary amount contributed
+  item?: string; // Optional description of a non-monetary contribution
+  note?: string; // Optional free-form note
+  addedAt: string; // ISO 8601 timestamp
+}
+```
+
+AsyncStorage keys:
+
+- `@birthday_tracker:group_gifts` → `JSON.stringify(GroupGift[])`
+- `@birthday_tracker:group_gift_contributions` → `JSON.stringify(GroupGiftContribution[])`
+
+#### Dummy Data
+
+Pre-seed the following for demo purposes:
+
+**Group Gift 1** — Captain: Jamie | Recipient: Alex | Gift: Kindle Paperwhite | Target: $140
+
+- Sam contributed $40
+- Chris contributed $35 + "wrapped it!"
+
+**Group Gift 2** — Captain: Morgan | Recipient: Jordan | Gift: REI gift card | Target: $60
+
+- (no contributions yet)
+
+#### Feature Details
+
+**F7.1 — Group Gifts List Screen**
+
+- The Group Gifts tab lists all active (`status: 'open'`) group gift campaigns.
+- Each campaign card shows: recipient name, gift description, captain name, total amount contributed (sum of `amount` fields) vs. target (if set), and number of contributors.
+- A **"+ New Campaign"** button opens a creation flow.
+
+**F7.2 — Create a Campaign**
+
+- Form fields: select recipient from existing birthday entries (required), gift description (required), target amount (optional, numeric), and captain name (required — the user declares themselves captain by entering their name).
+- On save, a new `GroupGift` is persisted and appears in the list.
+
+**F7.3 — Campaign Detail Screen**
+
+- Tapping a campaign card navigates to a detail screen showing:
+  - Gift description, captain, target vs. contributed amounts, and status.
+  - A list of all contributions with contributor name, amount/item, and note.
+  - An **"Add My Contribution"** button opening a form: contributor name (required), amount (optional), item description (optional), note (optional).
+  - A **"Close Campaign"** button (visible to all; intended for the captain) that sets `status: 'closed'` and disables further contributions.
+- Closed campaigns are moved to a collapsible "Past Campaigns" section on the list screen.
+
+**F7.4 — Progress Indicator**
+
+- When a `targetAmount` is set, display a progress bar showing `(sum of contributions / targetAmount) × 100%`.
+- The bar fills to 100% and changes color (e.g., green) when the target is met or exceeded.
+
+#### Acceptance Criteria — AF3
+
+- [ ] A "Group Gifts" tab is present in the tab bar.
+- [ ] The Group Gifts screen lists all open campaigns, each showing recipient, gift, captain, contribution total, and contributor count.
+- [ ] The "New Campaign" form requires a recipient and captain name; omitting either shows an inline error.
+- [ ] A valid new campaign is saved to AsyncStorage and appears immediately in the list.
+- [ ] Tapping a campaign card navigates to the detail screen with all contributions listed.
+- [ ] The "Add My Contribution" form requires at least a contributor name; the amount and item fields are optional.
+- [ ] A valid contribution is saved and the campaign totals update immediately.
+- [ ] When a target amount is set, a progress bar accurately reflects total contributions vs. target.
+- [ ] The progress bar reaches 100% (and changes color) when contributions meet or exceed the target.
+- [ ] "Close Campaign" sets the campaign to closed, disables new contributions, and moves it to "Past Campaigns".
+- [ ] Dummy data is pre-seeded and visible on first launch for demo purposes.
