@@ -6,9 +6,11 @@
  */
 
 import { useFocusEffect, router } from 'expo-router';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
+  Animated,
   FlatList,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -23,6 +25,9 @@ import { consumeCelebrate } from '@/utils/celebrateFlag';
 import { ensureSeeded } from '@/utils/seed';
 import { loadEntries, loadGroupGifts, loadWishlistItems } from '@/utils/storage';
 import Confetti from '@/components/confetti';
+
+// Animated TouchableOpacity used for today's birthday card glow effect
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 // ---------------------------------------------------------------------------
 // Calendar helpers
@@ -82,6 +87,20 @@ export default function HomeScreen() {
 
   // True while the celebration confetti overlay is playing
   const [showCelebration, setShowCelebration] = useState(false);
+
+  // Pulse animation for today's birthday card glow (0 → 1 → 0 repeatedly)
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: false }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 1200, useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulseAnim]);
 
   // -------------------------------------------------------------------------
   // Data loading
@@ -179,14 +198,30 @@ export default function HomeScreen() {
     const hasWishlist = !!wishlistMap[item.id];
     const groupGiftId = groupGiftMap[item.id];
 
+    const glowBorderColor = isToday
+      ? pulseAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [colors.tint, colorScheme === 'dark' ? '#DDD6FE' : '#C4B5FD'],
+        })
+      : 'transparent';
+
+    const glowShadowOpacity = isToday
+      ? pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.85] })
+      : 0;
+
     return (
-      <TouchableOpacity
+      <AnimatedTouchable
         style={[
           styles.card,
           {
             backgroundColor: accentColor,
-            borderColor: isToday ? colors.tint : 'transparent',
+            borderColor: glowBorderColor,
             borderWidth: 2,
+            shadowColor: colors.tint,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: glowShadowOpacity,
+            shadowRadius: 12,
+            elevation: isToday ? 8 : 2,
           },
         ]}
         onPress={() => router.push(`/edit/${item.id}`)}
@@ -210,10 +245,29 @@ export default function HomeScreen() {
           </Text>
         )}
 
+        {/* Birthday message button — only shown on the person's actual birthday */}
+        {isToday && (
+          <TouchableOpacity
+            style={[styles.wishlistButton, { borderColor: colors.tint }]}
+            onPress={(e) => {
+              e.stopPropagation();
+              Share.share({
+                message: `Happy Birthday, ${item.name}! 🎂🎉 Hope your day is amazing!`,
+              });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Send ${item.name} a birthday message`}
+          >
+            <Text style={[styles.wishlistButtonText, { color: colors.tint }]}>
+              🎉 Send Birthday Message
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* AF1 — "View Wishlist" button (only shown when items exist) */}
         {hasWishlist && (
           <TouchableOpacity
-            style={[styles.wishlistButton, { borderColor: colors.tint }]}
+            style={[styles.wishlistButton, { borderColor: colors.tint, marginTop: isToday ? 6 : 10 }]}
             onPress={(e) => {
               e.stopPropagation();
               router.push(`/wishlist/${item.id}`);
@@ -230,7 +284,7 @@ export default function HomeScreen() {
         {/* AF3 — "View Group Gift" button (only shown when an open campaign exists) */}
         {groupGiftId && (
           <TouchableOpacity
-            style={[styles.wishlistButton, { borderColor: colors.tint, marginTop: hasWishlist ? 6 : 10 }]}
+            style={[styles.wishlistButton, { borderColor: colors.tint, marginTop: (isToday || hasWishlist) ? 6 : 10 }]}
             onPress={(e) => {
               e.stopPropagation();
               router.push(`/group-gift/${groupGiftId}`);
@@ -243,7 +297,7 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </AnimatedTouchable>
     );
   };
 
